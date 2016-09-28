@@ -2161,7 +2161,7 @@ static void move_tab_to_mouse(void)
  */
 bool
 do_mouse (
-    oparg_T *oap,               /* operator argument, can be NULL */
+    oparg_T *oap,                   /* operator argument, can be NULL */
     int c,                          /* K_LEFTMOUSE, etc */
     int dir,                        /* Direction to 'put' if necessary */
     long count,
@@ -2177,7 +2177,9 @@ do_mouse (
   pos_T start_visual;
   bool moved;                   /* Has cursor moved? */
   bool in_status_line;          /* mouse in status line */
-  static bool in_tab_line = false;   /* mouse clicked in tab line */
+  static int drag_origin_col = -1;
+  static int drag_origin_row = -1;
+  static int was_drag = false;
   bool in_sep_line;             /* mouse in vertical separator line */
   int c1, c2;
   pos_T save_cursor;
@@ -2195,6 +2197,12 @@ do_mouse (
   for (;; ) {
     which_button = get_mouse_button(KEY2TERMCAP1(c), &is_click, &is_drag);
     if (is_drag) {
+      /* If this is the start of a drag record the origin */
+      if (!was_drag) {
+         drag_origin_col = mouse_col;
+         drag_origin_row = mouse_row;
+      }
+        
       /* If the next character is the same mouse event then use that
        * one. Speeds up dragging the status line. */
       if (vpeekc() != NUL) {
@@ -2212,6 +2220,7 @@ do_mouse (
         mouse_col = save_mouse_col;
       }
     }
+    was_drag = is_drag;   
     break;
   }
 
@@ -2224,13 +2233,8 @@ do_mouse (
   else {
     if (!got_click)                     /* didn't get click, ignore */
       return false;
-    if (!is_drag) {                     /* release, reset got_click */
+    if (!is_drag)                       /* release, reset got_click */
       got_click = false;
-      if (in_tab_line) {
-        in_tab_line = false;
-        return false;
-      }
-    }
   }
 
 
@@ -2358,7 +2362,7 @@ do_mouse (
   /* Check for clicking in the tab page line. */
   if (mouse_row == 0 && firstwin->w_winrow > 0) {
     if (is_drag) {
-      if (in_tab_line) {
+      if (drag_origin_row == 0) {
         move_tab_to_mouse();
       }
       return false;
@@ -2368,7 +2372,6 @@ do_mouse (
     if (is_click
         && cmdwin_type == 0
         && mouse_col < Columns) {
-      in_tab_line = true;
       c1 = tab_page_click_defs[mouse_col].tabnr;
       switch (tab_page_click_defs[mouse_col].type) {
         case kStlClickDisabled: {
@@ -2473,7 +2476,7 @@ do_mouse (
       }
     }
     return true;
-  } else if (is_drag && in_tab_line) {
+  } else if (is_drag && drag_origin_row == 0) {
     move_tab_to_mouse();
     return false;
   }
